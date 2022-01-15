@@ -1,0 +1,5 @@
+<launch>
+    <node pkg="astar_osqp" type="astar_osqp_demo" name="astar_osqp_demo" args="--log_dir=." output="screen" />
+    
+    <node name="rviz" pkg="rviz" type="rviz" args="-d $(find astar_osqp)/config/rvizConfig.rviz" output="screen" />
+</launch>
