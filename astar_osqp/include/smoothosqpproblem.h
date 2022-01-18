@@ -120,10 +120,10 @@ class FemPosDeviationSqpOsqpInterface {
   double curvature_constraint_ = 0.5;
 
   // Weights in optimization cost function
-  double weight_fem_pos_deviation_ = 1.0e6;
+  double weight_fem_pos_deviation_ = 5.0e6;
   double weight_path_length_ = 1.0e2;
   double weight_ref_deviation_ = 1.0e1;
-  double weight_curvature_constraint_slack_var_ = 1.0e5;
+  double weight_curvature_constraint_slack_var_ = 1.0e4;
 
   // Settings of osqp
   int max_iter_ = 4000;

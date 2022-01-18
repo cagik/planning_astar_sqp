@@ -2,7 +2,7 @@
 
 namespace AstarOsqp{
 
-void corridor::initCollsion(KDTree tree, double cols, double rows)
+void corridor::initCorridor(KDTree tree, double cols, double rows)
 {
     obstacleTree_ = tree;
     cols_ = cols;

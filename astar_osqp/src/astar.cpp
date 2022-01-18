@@ -11,11 +11,11 @@ namespace AstarOsqp{
  */
 void Astar::InitAstar(cv::Mat& _Map, cv::Mat& Mask)
 {
-    char neighbor8[8][2] = {
+  /*  char neighbor8[8][2] = {
             {-1, -1}, {-1, 0}, {-1, 1},
             {0, -1},            {0, 1},
             {1, -1},   {1, 0},  {1, 1}
-    };
+    }; */
 
     char bound24[24][2] = {
 
@@ -107,7 +107,7 @@ void Astar::configureMap(){
 }
 
 /**
- * @description: astar寻路，返回一个vector
+ * @description: astar寻路
  * @param {Point} _startPoint
  * @param {Point} _targetPoint
  * @return {vector<cv::Point>}

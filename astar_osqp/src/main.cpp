@@ -1,9 +1,9 @@
 /*
  * @Author: cagik
  * @Date: 2021-11-30 14:52:30
- * @LastEditTime: 2022-01-05 10:41:35
+ * @LastEditTime: 2022-01-18 13:38:50
  * @LastEditors: cagik
- * @Description: testdemo
+ * @Description: test_demo
  * @FilePath: /astarOsqp_ws/src/astar_osqp/src/main.cpp
  * cavata_iwnl
  */
@@ -45,14 +45,14 @@
 
 using namespace std;
 
-AstarOsqp::State start_state, end_state;
-vector<AstarOsqp::State> ref_point_plot;
-bool start_state_rcv = false, end_state_rcv = false, reference_rcv = false;
+AstarOsqp::State start_state, end_state;//起始点与重点
+vector<AstarOsqp::State> ref_point_plot;//锚点
+bool start_state_rcv = false, end_state_rcv = false, reference_rcv = false;//rviz中的flag
 
 /**
  * @description: 添加锚点的回调函数 点选至少两个ref_point
  * @param {PointStampedConstPtr} &p 在rviz中点选的publish point
- * @return {*}
+ * @return {}
  */
 void referenceCb(const geometry_msgs::PointStampedConstPtr &p) {
     AstarOsqp::State reference_point;
@@ -91,9 +91,9 @@ void goalCb(const geometry_msgs::PoseStampedConstPtr &goal) {
 }
 
 /**
- * @description: 根据start state产生的引导点，原理为根据start的pose方向产生向前5个size距离的point
+ * @description: 根据start state产生的引导点，根据start的pose方向产生向前10个size距离的point，用于图搜索
  * @param {State} &start_state
- * @return {*}
+ * @return {cv::Point}
  */
 cv::Point get_StartHeadingPoint(const AstarOsqp::State &s_state){
     cv::Point ref_start_Point;
@@ -101,7 +101,11 @@ cv::Point get_StartHeadingPoint(const AstarOsqp::State &s_state){
     ref_start_Point.y = s_state.y + sin(s_state.heading)*10;
     return ref_start_Point;
 }
-
+/**
+ * @description: 根据start state产生的引导点，根据start的pose方向产生向前5个size距离的point，用于实现起始点处的位姿约束
+ * @param {State&} s_state
+ * @return {pair<double, double>}
+ */
 pair<double, double> get_StartHeadingPoint_double(const AstarOsqp::State& s_state){
     return make_pair(s_state.x + cos(s_state.heading)*5, s_state.y + sin(s_state.heading)*5);
 }
@@ -109,7 +113,7 @@ pair<double, double> get_StartHeadingPoint_double(const AstarOsqp::State& s_stat
 /**
  * @description: 与上面的作用类似，不过是产生向后的point
  * @param {State} &goal_state
- * @return {ref_goal_Point}
+ * @return {cv::Point}
  */
 cv::Point get_GoalHeadingPoint(const AstarOsqp::State &g_state){
     cv::Point ref_goal_Point;
@@ -117,12 +121,20 @@ cv::Point get_GoalHeadingPoint(const AstarOsqp::State &g_state){
     ref_goal_Point.y = g_state.y - sin(g_state.heading)*10;
     return ref_goal_Point;
 }
-
+/**
+ * @description: 同上
+ * @param {State&} g_state
+ * @return {pair<double, double>}
+ */
 pair<double, double> get_GoalHeadingPoint_double(const AstarOsqp::State& g_state){
     return make_pair(g_state.x - cos(g_state.heading)*5, g_state.y - sin(g_state.heading)*5);
 }
 
-
+/**
+ * @description: 产生用于初始点处约束的边界框
+ * @param {double} bound
+ * @return {*}
+ */
 void setBox(vector<double>& box, double bound){
     box.clear();
     for(int i = 0; i < 4; i++){
@@ -132,16 +144,16 @@ void setBox(vector<double>& box, double bound){
 
 int main(int argc, char** argv)
 {
-    // init ros node
+    // init ros node #初始化ros的node
     ros::init(argc, argv, "path_opyimization");
     ros::NodeHandle n("~");
 
-    //load image
+    //load image #加载地图
     string image_dir = ros::package::getPath("astar_osqp");
     string image_file = "gridmap.png";
     image_dir.append("/" + image_file);
 
-    //init grid_map
+    //init grid_map #初始化ros的grid_map
     cv::Mat img_src = cv::imread(image_dir, CV_8UC1);
     double resolution = 1;
     unsigned char OCCUPY = 0;
@@ -155,23 +167,23 @@ int main(int argc, char** argv)
     grid_map.get("distance") *= resolution;
     grid_map.setFrameId("/map");
 
-    //pub and sub
+    //pub and sub #ros中的pub以及sub
     ros::Publisher map_publisher = n.advertise<nav_msgs::OccupancyGrid>("grid_map", 1, true);
     ros::Subscriber ref_sub = n.subscribe("/clicked_point", 1, referenceCb);
     ros::Subscriber start_sub = n.subscribe("/initialpose", 1, startCb);
     ros::Subscriber end_sub = n.subscribe("/move_base_simple/goal", 1, goalCb);
 
-    //vis_tools_param
+    //vis_tools_param 可视化工具
     ros_viz_tools::RosVizTools markers(n, "markers");
     string marker_frame_id = "/map";
     
-    //init aStar
+    //init aStar 初始化Astar算法部分
     cv::Mat Mask;
     AstarOsqp::Astar A;
     A.InitAstar(img_src, Mask);   
-    vector<cv::Point> obs = A.getObstacle();
 
-    //kdtree
+    //obs kdtree    初始化障碍物的kdtree
+    vector<cv::Point> obs = A.getObstacle();
     pointVec obsPoints;
     point_t pt;
     for(size_t i = 0; i < obs.size(); ++i)
@@ -183,11 +195,11 @@ int main(int argc, char** argv)
     }
     KDTree obsTree(obsPoints);
 
-    //astar result
+    //astar result 储存astar的路径结果
     vector<pair<double,double>> pathlist;
     vector<pair<double,double>> Totalpathlist;
     
-    //interpolation
+    //interpolation 样条曲线结果
     double sum_dis = 0.0;
     double per_dis = 2.0; 
     vector<pair<double,double>> raw_x_traj;
@@ -198,21 +210,20 @@ int main(int argc, char** argv)
     vector<pair<double,double>> tmp_traj;
     vector<pair<double,double>> plan_traj;
 
-    //corridor
+    //corridor 安全走廊相关类
     AstarOsqp::corridor C;
-    C.initCollsion(obsTree, img_src.cols, img_src.rows);
+    C.initCorridor(obsTree, img_src.cols, img_src.rows);
 
-    //time
+    //time 计时器，测试时候用到，不用管这个
     clock_t s_time, e_time;
 
-    //Osqp param
+    //Osqp param #后端优化的相关参数
     FemPosDeviationSqpOsqpInterface solver;
-    vector<pair<double, double>> raw_point2d;
     vector<vector<double>> bound_boxes;
     vector<double> box;
     vector<pair<double,double>> opt_path;
 
-    //assitant vairable
+    //vairable #在不同位置含义不同
     double dx,dy,dis;
 
     ros::Rate rate(30);
@@ -224,7 +235,7 @@ int main(int argc, char** argv)
         markers.clear();
         int id = 0;
 
-        //double click to clear ref_point
+        //double click to clear ref_point  双击清除所有锚点
         if(ref_point_plot.size() >= 2){
             const auto &p1 = ref_point_plot[ref_point_plot.size() - 2];
             const auto &p2 = ref_point_plot.back();
@@ -235,7 +246,7 @@ int main(int argc, char** argv)
 
         }
 
-        //vis ref_point
+        //vis ref_point 锚点可视化
         visualization_msgs::Marker ref_marker = markers.newSphereList(1, "reference point", id++, ros_viz_tools::RED, marker_frame_id);
         for(size_t i = 0; i != ref_point_plot.size(); i++){
             geometry_msgs::Point p;
@@ -246,7 +257,7 @@ int main(int argc, char** argv)
         }
         markers.append(ref_marker);
 
-        //vis start and goal (x,y,heading)
+        //vis start and goal (x,y,heading) 起始点与终点可视化
         geometry_msgs::Vector3 scale;
         scale.x = 2.0;
         scale.y = 0.3;
@@ -274,13 +285,13 @@ int main(int argc, char** argv)
         visualization_msgs::Marker end_marker =markers.newArrow(scale, end_pose, "end point", id++, ros_viz_tools::CYAN, marker_frame_id);
         markers.append(end_marker);
 
-        //start_ref_point and end_ref_point for heading
+        //start_ref_point and end_ref_point for heading  产生两个起始引导点以及两个终点引导点
         cv::Point start_ref_point = get_StartHeadingPoint(start_state);
         pair<double, double> start_ref_point_double = get_StartHeadingPoint_double(start_state);
-
         cv::Point end_ref_point = get_GoalHeadingPoint(end_state);
         pair<double, double> end_ref_point_double = get_GoalHeadingPoint_double(end_state);
 
+        //ref_points 用于astar搜索的点的集合
         vector<cv::Point> ref_points;
         ref_points.push_back(start_ref_point);
         for(size_t i = 0; i < ref_point_plot.size(); ++i){
@@ -291,10 +302,10 @@ int main(int argc, char** argv)
         }
         ref_points.push_back(end_ref_point);
 
-        //planning
+        //planning 开始规划
         if(start_state_rcv && end_state_rcv && reference_rcv){
 
-            //init refPoint kdtree
+            //init refPoint kdtree  暂时无用，不需要看
         /*    pointVec refPoints;
             point_t ref_pt;
             for(size_t i = 0; i < ref_point_plot.size(); ++i)
@@ -306,7 +317,7 @@ int main(int argc, char** argv)
             }
             KDTree refTree(refPoints); */
 
-            //get ref path
+            //产生起始点处的引导线  
             for(int i = 0; i < 5; i++){
                 pathlist.push_back(make_pair(start_state.x + cos(start_state.heading)*i, start_state.y + sin(start_state.heading)*i));
             }
@@ -318,12 +329,14 @@ int main(int argc, char** argv)
             Totalpathlist.insert(Totalpathlist.end(), pathlist.begin(), pathlist.end());
             pathlist.clear();
 
+            //astar搜索
             for(size_t i = 0; i < ref_points.size()-1; ++i){
                 pathlist = A.pathPlanning(ref_points[i], ref_points[i+1]);
                 Totalpathlist.insert(Totalpathlist.end(), pathlist.begin(), pathlist.end());
             }
             pathlist.clear();
 
+            //产生终点处的引导线
             dx = (end_ref_point_double.first - end_ref_point.x) / 5;
             dy = (end_ref_point_double.second - end_ref_point.y) / 5;
             for(int i = 0; i < 5; i++){
@@ -335,21 +348,18 @@ int main(int argc, char** argv)
             pathlist.push_back(make_pair(end_state.x, end_state.y));
             Totalpathlist.insert(Totalpathlist.end(), pathlist.begin(), pathlist.end());
  
-            //get inter_path
+            //get inter_path 进行曲线插值
             for(size_t i = 0; i < Totalpathlist.size()/3; i++){
                 tmp_traj.push_back(Totalpathlist[i*3]);
             }
             tmp_traj.push_back(Totalpathlist[Totalpathlist.size()-1]);
-
             raw_x_traj.push_back(make_pair(sum_dis, tmp_traj.front().first));
             raw_y_traj.push_back(make_pair(sum_dis, tmp_traj.front().second));
-
             for(size_t i = 1; i < tmp_traj.size();++i){
                 sum_dis += AstarOsqp::distance(tmp_traj[i],tmp_traj[i-1]);
                 raw_x_traj.push_back(make_pair(sum_dis, tmp_traj[i].first));
                 raw_y_traj.push_back(make_pair(sum_dis, tmp_traj[i].second));
             }
-
             inter_x_traj.Init(raw_x_traj);
             inter_y_traj.Init(raw_y_traj);            
 
@@ -361,7 +371,7 @@ int main(int argc, char** argv)
             }
             inter_traj.push_back(make_pair(end_state.x, end_state.y));
 
-            //more points
+            //more points 拓展点的数量，每两个点之间产生一个新点
             for(size_t i = 0; i < inter_traj.size()-1; ++i){
                 dx = (inter_traj[i+1].first - inter_traj[i].first)/2;
                 dy = (inter_traj[i+1].second - inter_traj[i].second)/2;
@@ -372,30 +382,26 @@ int main(int argc, char** argv)
             }
             plan_traj.push_back(make_pair(inter_traj[inter_traj.size()-1].first, inter_traj[inter_traj.size()-1].second));
 
-          /*  for(size_t i = 0; i < plan_traj.size(); i++){
-                cout << "x:" << plan_traj[i].first << " y:" << plan_traj[i].second << endl;
-            } */
-
-            //get corridor
+            //get corridor  产生安全通道
             s_time = clock();
             C.update(plan_traj);
             e_time = clock();
             cout << "update time is: " <<(double)(e_time - s_time) / CLOCKS_PER_SEC << "s" << endl;
 
-            //osqp
-            point_t tmp;
-            for(int i =0; i<plan_traj.size(); ++i){
-                raw_point2d.push_back(make_pair(plan_traj[i].first, plan_traj[i].second));
-            }
-            solver.set_ref_points(raw_point2d);
+            //osqp  初始化ref_point 
+            solver.set_ref_points(plan_traj);
 
+            //osqp  起始点附近设定较小的bound，用于限制位姿，注：这里的j<10与smooth.cpp中line424处对应
             for(size_t j = 0 ; j < 10; ++j)
             {   
                 setBox(box, 0.3);
                 bound_boxes.push_back(box);
             }
+
+            //osqp 中间点的bound由box设定
             for(size_t j = 10  ; j < plan_traj.size()-10; ++j)
             {   
+                //point_t tmp; 暂时无用，不需要看
                /* tmp.clear();
                 tmp.push_back(plan_traj[j].first);
                 tmp.push_back(plan_traj[j].second);
@@ -403,37 +409,37 @@ int main(int argc, char** argv)
                 dis = sqrt(pow(tmp[0] - res[0], 2) + pow(tmp[1] - res[1], 2)); */
                 bound_boxes.push_back(C.boxes[j]);
             }
+
+            //osqp  终点附近设定较小的bound，用于限制位姿，注：这里的j与smooth.cpp中line440处对应
             for(size_t j = plan_traj.size()- 10; j < plan_traj.size(); ++j)
             {
                 setBox(box, 0.3);
                 bound_boxes.push_back(box);
             }
             
+            //osqp 传入bound
             solver.set_boundsBox(bound_boxes);
-
+            
+            //osqp 计算
             if(!solver.Solve()){
                 cout << "failure" << endl;
             }
 
+            //得到结果
             opt_path = solver.opt_xy();
             start_state_rcv = false;
         }
 
         bool opt_ok = false;
 
-        //test
-      /*  if(test_flag){
-            C.update(test_traj);
-            test_flag = false;
-        } */
 
-        //define path_color
+        //define path_color 
         ros_viz_tools::ColorRGBA path_color;
         path_color.r = 1.0;
         path_color.g = 0.0;
         path_color.b = 0.0;
 
-        //vis astar path
+        //vis astar path  astar路径可视化
         visualization_msgs::Marker result_path_marker = markers.newLineStrip(0.2, "ref path", id++, path_color, marker_frame_id);
         for(size_t i = 0; i < Totalpathlist.size() ; ++i){
             geometry_msgs::Point p;
@@ -446,23 +452,7 @@ int main(int argc, char** argv)
         }
         markers.append(result_path_marker);
 
-        //vis opt path
-        path_color.r = 0.063;
-        path_color.g = 0.305;
-        path_color.b = 0.545;
-        visualization_msgs::Marker opt_path_marker = markers.newLineStrip(0.5, "opt path", id++, path_color, marker_frame_id);
-        for(size_t i = 0; i < opt_path.size(); ++i){
-            geometry_msgs::Point p;
-            p.x = opt_path[i].first;
-            p.y = opt_path[i].second;
-            p.z = 1.0;
-            opt_path_marker.points.push_back(p);
-            path_color.a = 1;
-            opt_path_marker.colors.emplace_back(path_color);
-        }
-        markers.append(opt_path_marker); 
-
-        //vis inter path
+        //vis inter path 插值路径可视化
         path_color.r = 0.0;
         path_color.g = 0.9;
         path_color.b = 0.1;
@@ -478,7 +468,23 @@ int main(int argc, char** argv)
         }
         markers.append(inter_path_marker); 
 
-         //vis corridor
+        //vis opt path 优化路径可视化
+        path_color.r = 0.063;
+        path_color.g = 0.305;
+        path_color.b = 0.545;
+        visualization_msgs::Marker opt_path_marker = markers.newLineStrip(0.5, "opt path", id++, path_color, marker_frame_id);
+        for(size_t i = 0; i < opt_path.size(); ++i){
+            geometry_msgs::Point p;
+            p.x = opt_path[i].first;
+            p.y = opt_path[i].second;
+            p.z = 1.0;
+            opt_path_marker.points.push_back(p);
+            path_color.a = 1;
+            opt_path_marker.colors.emplace_back(path_color);
+        }
+        markers.append(opt_path_marker); 
+
+         //vis corridor 安全走廊可视化
         path_color.r = 0.1;
         path_color.g = 0.1;
         path_color.b = 0.8;
@@ -519,7 +525,7 @@ int main(int argc, char** argv)
         }
 
 
-
+        //ros 相关参数
         grid_map.setTimestamp(time.toNSec());
         nav_msgs::OccupancyGrid message;
         grid_map::GridMapRosConverter::toOccupancyGrid(grid_map, "obstacle", FREE, OCCUPY, message);
@@ -528,7 +534,6 @@ int main(int argc, char** argv)
 
         ros::spinOnce();
         rate.sleep();
-
     }
 
     return 0;

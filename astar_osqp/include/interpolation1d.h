@@ -7,7 +7,6 @@
 #include <vector>
 
 #include "eigen_spline/Splines"
-//#include "eigen/unsupported/Eigen/Splines"
 
 using namespace std;
 
